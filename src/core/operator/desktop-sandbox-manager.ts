@@ -392,13 +392,25 @@ export class OciCliExecutor implements IContainerExecutor {
     const memory = `${config.resourceLimits?.memoryMb || 2048}m`;
     const pidsLimit = config.resourceLimits?.pidsLimit || 512;
 
+    // Pre-flight: remove any stale container with the same name from a previous session
+    try {
+      await this.execOci(['rm', '-f', containerName]);
+    } catch {
+      // No existing container to remove — safe to proceed
+    }
+
+    const engine = await this.getActiveEngine();
     const args = [
       'run',
       '-d',
       '--name', containerName,
       '--rm',
-      '-p', `${webRtcPort}:6080`,
-      '-p', `${vncPort}:5901`,
+      // Podman supports --replace for atomic name reuse; Docker does not
+      ...(engine === 'podman' || engine === 'wsl-podman' ? ['--replace'] : []),
+      // WSL2 Podman requires host networking so that KasmVNC/WebRTC ports bind on WSL VM and forward to Windows localhost
+      ...(engine === 'wsl-podman'
+        ? ['--network=host']
+        : ['-p', `${webRtcPort}:6080`, '-p', `${vncPort}:5901`]),
       '--cpus', String(cpus),
       '--memory', memory,
       '--pids-limit', String(pidsLimit),
@@ -436,7 +448,16 @@ export class OciCliExecutor implements IContainerExecutor {
   }
 
   async revert(tag: string): Promise<{ containerId: string }> {
-    const args = ['run', '-d', '--rm', '-p', '6080:6080', '-p', '5901:5901', tag];
+    const engine = await this.getActiveEngine();
+    const args = [
+      'run',
+      '-d',
+      '--rm',
+      ...(engine === 'wsl-podman'
+        ? ['--network=host']
+        : ['-p', '6080:6080', '-p', '5901:5901']),
+      tag
+    ];
     const { stdout } = await this.execOci(args);
     return { containerId: stdout.trim().slice(0, 12) };
   }
@@ -670,6 +691,36 @@ export class DesktopSandboxManager extends EventEmitter {
   }
 
   /**
+   * Helper to wait for the WebRTC/VNC port to accept connections before returning RUNNING state
+   */
+  private async waitForPortReady(port: number, timeoutMs = 8000): Promise<boolean> {
+    const http = await import('http');
+    const start = Date.now();
+    while (Date.now() - start < timeoutMs) {
+      try {
+        const ready = await new Promise<boolean>((resolve) => {
+          const req = http.get(
+            { host: '127.0.0.1', port, path: '/vnc.html', timeout: 600 },
+            (res) => {
+              resolve(res.statusCode === 200 || (res.statusCode !== undefined && res.statusCode < 500));
+            }
+          );
+          req.on('error', () => resolve(false));
+          req.on('timeout', () => {
+            req.destroy();
+            resolve(false);
+          });
+        });
+        if (ready) return true;
+      } catch {
+        // ignore and retry
+      }
+      await new Promise((r) => setTimeout(r, 250));
+    }
+    return false;
+  }
+
+  /**
    * Start or spawn the Desktop Sandbox Container
    */
   async startSandbox(): Promise<SandboxStatus> {
@@ -684,6 +735,12 @@ export class DesktopSandboxManager extends EventEmitter {
     try {
       const res = await this.executor.start(this.config);
       this.containerId = res.containerId;
+
+      // Wait for KasmVNC WebRTC port to become ready so iframe connects immediately
+      if (!this.config.mockProvider) {
+        await this.waitForPortReady(this.config.webRtcPort, 8000);
+      }
+
       this.state = 'RUNNING';
       this.startedAt = Date.now();
 
@@ -703,6 +760,8 @@ export class DesktopSandboxManager extends EventEmitter {
         this.lastError = 'Docker Desktop Engine is not currently running. Please start Docker Desktop, or switch to Sandbox Simulation Mode to test controls & actions.';
       } else if (rawMsg.includes('Unable to find image') || rawMsg.includes('No such image')) {
         this.lastError = `Sandbox container image (${this.config.imageName}) not built. Run docker build or switch to Simulation Mode.`;
+      } else if (rawMsg.includes('already in use') || rawMsg.includes('name is already taken')) {
+        this.lastError = `A container named "${this.config.containerName}" already exists from a previous session. It was not cleaned up automatically — please stop it manually, or click Reset.`;
       } else {
         this.lastError = rawMsg;
       }

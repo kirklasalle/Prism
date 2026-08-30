@@ -704,6 +704,9 @@ export function dashboardLog(source, operation, detail, severity) {
     safeRenderStep('logsPanel', window.renderLogsPanel);
   }
 }
+if (typeof window !== 'undefined') {
+  window.dashboardLog = dashboardLog;
+}
 
 export function showTransientNotice(message, severity = 'info', timeout = 4000) {
   try {

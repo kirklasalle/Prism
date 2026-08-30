@@ -1,4 +1,4 @@
-# PRISM — Authoritative Status (v0.23.1)
+# PRISM — Authoritative Status (v0.24.1)
 
 > Single source of truth for what's shipped, what's pending, and what's gated.
 > Replaces the audit-doc maze for operator and investor reading. Linked from
@@ -10,8 +10,8 @@ PRISM is an **open-source, self-hostable, governance-native Agents-as-a-Service
 runtime**. It runs on a single laptop or a Kubernetes cluster, ships with a
 provable Permanent Active Directives (10 Laws) integrity gate, Character
 Accountability Control (CAC) durable identity chains, Spectrum Refraction 2.0
-tri-model cognitive consensus orchestration, and the LLRE Cognitive Economics
-dynamic budget governor.
+tri-model cognitive consensus orchestration, and the Phase V Governed Visual Desktop
+Sandbox.
 
 The phrase "Agents As A Service" was coined by Kirk LaSalle.
 
@@ -19,7 +19,7 @@ The phrase "Agents As A Service" was coined by Kirk LaSalle.
 
 | Field            | Value                                          |
 | ---------------- | ---------------------------------------------- |
-| Current version  | `0.23.1`                                       |
+| Current version  | `0.24.1`                                       |
 | Branch           | `main`                                         |
 | Build script     | `npm run build` (auto-runs PAD prebuild hash)  |
 | Master Audit     | [`PRISM_MASTER_CRITICAL_AND_MARKET_AUDIT_2026.md`](PRISM_MASTER_CRITICAL_AND_MARKET_AUDIT_2026.md) |
@@ -28,7 +28,20 @@ The phrase "Agents As A Service" was coined by Kirk LaSalle.
 Operators are expected to run pre-flight diagnostics before every deployment. Any
 non-zero exit indicates an unresolved readiness issue.
 
-## What's Shipped (v0.21.0 → v0.23.1)
+## What's Shipped (v0.21.0 → v0.24.1)
+
+### Governed Visual Desktop Sandbox Stabilization & Universal Logging (2026-08-29)
+
+- **Phase V Governed Visual Desktop Sandbox**: Live containerized Debian 12 Bookworm + Openbox + KasmVNC streaming at 60fps with instant operator co-pilot takeover and checkpoint snapshots.
+- **Multi-Engine OCI Robustness**: Stale container collision handling, `--replace` Podman support, and direct `--network=host` WSL2 binding for reliable port 6080/5901 forwarding to Windows localhost.
+- **Port Readiness Probing**: Active backend HTTP readiness gating (`waitForPortReady`) eliminating container startup race conditions.
+- **Universal Logging Infrastructure**: Live desktop activity trail with timestamped severity badges, full Logs & Debug tab filtering (`desktop`/`sandbox`), and global `window.dashboardLog` integration.
+
+### Model Capability Matrix Modernization & xAI Integration (2026-08-29)
+
+- Registered ~30 August 2026 frontier models (Gemini 3.7 Flash, GPT-5.6 family, Claude 5 series, DeepSeek V4, Meta Llama 4, Qwen 3.8, Mistral Large 3).
+- Added first-class provider support for xAI (Grok).
+- Updated Spectrum Refraction cognitive kinship matrices and token pricing catalogs.
 
 ### Master Audit, CAC Governance & Spectrum Refraction 2.0 (2026-08-14)
 

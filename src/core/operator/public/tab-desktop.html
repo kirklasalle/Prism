@@ -66,6 +66,9 @@
       <button class="secondary-button" onclick="window.prismDesktop && window.prismDesktop.resetSandbox()" style="font-size:11px; padding:6px 12px; color:#f87171;" title="Wipe and restart sandbox">
         🔄 Reset
       </button>
+      <button id="btn-sandbox-reload" class="secondary-button" onclick="window.prismDesktop && window.prismDesktop.reloadStream()" style="font-size:11px; padding:6px 12px; display:none; color:#38bdf8;" title="Reload live VNC stream">
+        🔄 Reload Stream
+      </button>
       <button id="btn-toggle-pip" class="secondary-button" onclick="window.prismDesktop && window.prismDesktop.togglePiP()" style="font-size:11px; padding:6px 12px;" title="Toggle Floating Picture-in-Picture">
         🗖 PiP
       </button>
@@ -137,4 +140,19 @@
 
     </div>
   </div>
+
+  <!-- Desktop Sandbox Activity Log Trail -->
+  <div class="panel" style="background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:12px; max-height:200px; display:flex; flex-direction:column;">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+      <span style="font-weight:700; color:#ddd; text-transform:uppercase; font-size:10px; letter-spacing:0.5px;">📝 Desktop Activity Log</span>
+      <div style="display:flex; gap:6px; align-items:center;">
+        <span id="desktop-log-count" class="muted" style="font-size:9px;">0 entries</span>
+        <button class="secondary-button" onclick="window.prismDesktop && window.prismDesktop.clearActivityLog()" style="font-size:9px; padding:2px 6px;">Clear</button>
+      </div>
+    </div>
+    <div id="desktop-activity-log" style="flex:1; overflow-y:auto; font-family:monospace; font-size:11px; line-height:1.6; color:#94a3b8; background:rgba(0,0,0,0.2); border-radius:6px; padding:6px 8px; border:1px solid rgba(255,255,255,0.04);">
+      <div class="muted" style="font-size:10px; text-align:center; padding:8px;">No desktop sandbox events yet.</div>
+    </div>
+  </div>
+
 </div>

@@ -2,6 +2,26 @@
 
 All notable changes to the PRISM project are documented in this file.
 
+## v0.24.1 — 2026-08-29 — Governed Visual Desktop Sandbox Stabilization & Universal Logging Infrastructure
+
+Stabilizes the Phase V Governed Visual Desktop Sandbox (`src/core/operator/desktop-sandbox-manager.ts`), resolving container name conflict crashes across OCI runtimes (Docker, Podman, WSL2 Podman), adding backend port readiness probing to eliminate startup race conditions, establishing direct host-networking for WSL2 Podman environments, integrating live desktop activity log trails, and exposing universal cross-tab `dashboardLog()` tracing to the central Logs & Debug console.
+
+### Added
+
+- **Desktop Sandbox Live Activity Log Panel (`src/core/operator/public/tab-desktop.html`, `src/core/operator/public/tab-desktop.js`)**: Embedded a real-time event trail directly beneath the visual desktop canvas. Displays formatted timestamps, colored severity indicators (✅ info, ⚠️ warn, ❌ error, 🚀 success), live entry counters, and a one-click **Clear** utility.
+- **Universal Dashboard Logging Integration (`src/core/operator/public/dashboard-core.js`, `src/core/operator/public/tab-logs.html`, `src/core/operator/public/tab-desktop.js`)**:
+  - Exported `window.dashboardLog` globally so all frontend modules can emit structured log events to the central operator console.
+  - Added `desktop` and `sandbox` filter options to the Source selector in the **Logs & Debug** tab.
+  - Wired all sandbox lifecycle transitions (start, stop, autonomous/takeover mode toggles, checkpoint snapshots, reverts, resets, burst captures, and image builds) into `dashboardLog('desktop', ...)`.
+- **Backend Port Readiness Gate (`src/core/operator/desktop-sandbox-manager.ts`)**: Implemented `waitForPortReady(port, timeoutMs)` in `DesktopSandboxManager.startSandbox()`, actively probing `http://127.0.0.1:6080/vnc.html` every 250ms until websockify/KasmVNC returns `200 OK` before transitioning state to `RUNNING`.
+- **Manual & Automated Viewport Stream Recovery (`src/core/operator/public/tab-desktop.html`, `src/core/operator/public/tab-desktop.js`)**: Added a dedicated `🔄 Reload Stream` toolbar button and enhanced `checkVncConnectivity()` with automatic iframe reloads upon port readiness detection.
+
+### Fixed
+
+- **Container Name Collision & Stale Container Handling (`src/core/operator/desktop-sandbox-manager.ts`)**: Added pre-flight removal (`execOci(['rm', '-f', containerName])`) and `--replace` flags for Podman engines in `OciCliExecutor.start()`, preventing crashes when restarting after ungraceful shutdowns or reusing existing container names.
+- **WSL2 Podman Port Forwarding & "localhost Refused to Connect" Resolution (`src/core/operator/desktop-sandbox-manager.ts`)**: Configured `OciCliExecutor` to use `--network=host` when running in `wsl-podman` mode, ensuring KasmVNC WebRTC port 6080 and RFB port 5901 bind directly on the WSL network stack and mirror reliably to Windows `localhost`.
+- **Container Cleanup on Stop/Reset (`src/core/operator/desktop-sandbox-manager.ts`)**: Ensured `stopSandbox()` and `resetSandbox()` target `this.containerId || this.config.containerName` so untracked or orphaned containers are cleanly terminated.
+
 ## v0.24.0 — 2026-08-29 — Model Capability Matrix Modernization, xAI (Grok) Integration & August 2026 Frontier Models
 
 Comprehensive audit and modernization of the PRISM Model Capability Matrix (`src/core/operator/model-capability-matrix.ts`), registering ~30 newly released frontier model families across Google, OpenAI, Anthropic, xAI, Meta, DeepSeek, Mistral, Qwen, and Cohere. Builds full first-class provider routing and authentication for xAI (Grok), updates Spectrum Refraction cognitive kinship matrices, establishes structured lifecycle deprecation tracking, and updates the token pricing catalog to current August 2026 rates.

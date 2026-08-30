@@ -12,12 +12,69 @@
       this.burstAnimationInterval = null;
       this.burstFrames = [];
       this.currentFrameIdx = 0;
+      this.activityLogEntries = [];
+      this.previousState = null;
     }
 
     init() {
+      this.logDesktopEvent('info', 'Desktop Sandbox controller initialized');
       this.refreshStatus();
       this.startPolling();
       this.setupPiPContainer();
+    }
+
+    /**
+     * Log a desktop sandbox event to both the local activity trail and the central dashboard log
+     */
+    logDesktopEvent(severity, message, details) {
+      const ts = new Date().toLocaleTimeString();
+      const entry = { ts, severity, message };
+      this.activityLogEntries.push(entry);
+      if (this.activityLogEntries.length > 500) this.activityLogEntries = this.activityLogEntries.slice(-500);
+
+      // Emit to central dashboard log system (Logs & Debug tab)
+      if (typeof window.dashboardLog === 'function') {
+        window.dashboardLog('desktop', message, details || message, severity);
+      }
+
+      // Console trace for developer debugging
+      const prefix = '[PrismDesktop]';
+      if (severity === 'error') console.error(prefix, message, details || '');
+      else if (severity === 'warn') console.warn(prefix, message, details || '');
+      else console.log(prefix, message, details || '');
+
+      this.renderActivityLog();
+    }
+
+    renderActivityLog() {
+      const container = document.getElementById('desktop-activity-log');
+      const counter = document.getElementById('desktop-log-count');
+      if (!container) return;
+
+      if (counter) counter.innerText = `${this.activityLogEntries.length} entries`;
+
+      if (!this.activityLogEntries.length) {
+        container.innerHTML = '<div class="muted" style="font-size:10px; text-align:center; padding:8px;">No desktop sandbox events yet.</div>';
+        return;
+      }
+
+      const sevColor = (s) => s === 'error' ? '#f87171' : s === 'warn' ? '#fbbf24' : s === 'success' ? '#34d399' : '#94a3b8';
+      const sevIcon = (s) => s === 'error' ? '❌' : s === 'warn' ? '⚠️' : s === 'success' ? '✅' : 'ℹ️';
+
+      container.innerHTML = this.activityLogEntries.slice(-100).map(e =>
+        `<div style="display:flex; gap:6px; align-items:baseline; padding:1px 0; border-bottom:1px solid rgba(255,255,255,0.03);">`
+        + `<span style="color:#64748b; font-size:9px; min-width:65px;">${e.ts}</span>`
+        + `<span style="font-size:10px;">${sevIcon(e.severity)}</span>`
+        + `<span style="color:${sevColor(e.severity)};">${e.message}</span>`
+        + `</div>`
+      ).join('');
+
+      container.scrollTop = container.scrollHeight;
+    }
+
+    clearActivityLog() {
+      this.activityLogEntries = [];
+      this.renderActivityLog();
     }
 
     startPolling() {
@@ -60,6 +117,15 @@
         if (!res.ok) return;
         const data = await res.json();
         if (data.ok && data.status) {
+          // Log state transitions
+          if (this.previousState && this.previousState !== data.status.state) {
+            this.logDesktopEvent(
+              data.status.state === 'ERROR' ? 'error' : 'info',
+              `State transition: ${this.previousState} → ${data.status.state}`,
+              `Container: ${data.status.containerId || 'none'}`
+            );
+          }
+          this.previousState = data.status.state;
           this.currentStatus = data.status;
           this.renderStatus(data.status);
         }
@@ -132,6 +198,11 @@
         }
       }
 
+      const reloadBtn = document.getElementById("btn-sandbox-reload");
+      if (reloadBtn) {
+        reloadBtn.style.display = (status.state === "RUNNING" || status.state === "HELD_FOR_OPERATOR") ? "inline-block" : "none";
+      }
+
       if (status.state === "RUNNING" || status.state === "HELD_FOR_OPERATOR") {
         if (placeholder) placeholder.style.display = "none";
         if (status.isMock) {
@@ -146,10 +217,13 @@
             vncFrame.style.display = "block";
             if (vncFrame.src === "about:blank" || !vncFrame.src.includes(String(status.webRtcPort))) {
               vncFrame.src = status.streamUrl;
+              this.logDesktopEvent('info', `VNC stream connecting → localhost:${status.webRtcPort}`);
+              this.checkVncConnectivity(vncFrame, status);
             }
           }
         }
       } else {
+        this._streamReadyLoaded = false;
         if (vncFrame) vncFrame.style.display = "none";
         if (simCanvas) simCanvas.style.display = "none";
         if (placeholder) placeholder.style.display = "flex";
@@ -186,6 +260,18 @@
       if (portEl) portEl.innerText = status.isMock ? "Mock Loopback (Simulation)" : `${status.webRtcPort} (WebRTC) / ${status.vncPort} (VNC)`;
 
       this.renderSnapshots(status.snapshots || []);
+    }
+
+    reloadStream() {
+      const vncFrame = document.getElementById("desktop-vnc-frame");
+      if (vncFrame && this.currentStatus && this.currentStatus.streamUrl) {
+        this.logDesktopEvent('info', 'Reloading VNC stream viewport...');
+        vncFrame.src = "about:blank";
+        setTimeout(() => {
+          vncFrame.src = this.currentStatus.streamUrl + (this.currentStatus.streamUrl.includes('?') ? '&' : '?') + '_r=' + Date.now();
+          this.logDesktopEvent('success', 'VNC stream reloaded');
+        }, 150);
+      }
     }
 
     async refreshSimScreenshot() {
@@ -230,7 +316,33 @@
       `).join("");
     }
 
+    /**
+     * Check if VNC iframe is reachable; if WSL2 port forwarding fails, show diagnostic overlay
+     */
+    checkVncConnectivity(vncFrame, status) {
+      if (this._vncCheckTimer) clearTimeout(this._vncCheckTimer);
+      this._vncCheckTimer = setTimeout(() => {
+        try {
+          fetch(`http://localhost:${status.webRtcPort}/vnc.html`, { mode: 'no-cors', signal: AbortSignal.timeout(3000) })
+            .then(() => {
+              this.logDesktopEvent('success', `VNC stream reachable on port ${status.webRtcPort}`);
+              const overlay = document.getElementById('vnc-diag-overlay');
+              if (overlay) overlay.remove();
+              if (vncFrame && (!this._streamReadyLoaded || vncFrame.src.includes('about:blank'))) {
+                this._streamReadyLoaded = true;
+                vncFrame.src = status.streamUrl;
+              }
+            })
+            .catch(() => {
+              this.logDesktopEvent('warn', `VNC port ${status.webRtcPort} initializing...`);
+              this._vncCheckTimer = setTimeout(() => this.checkVncConnectivity(vncFrame, status), 1500);
+            });
+        } catch (_) {}
+      }, 1000);
+    }
+
     async toggleSimulationMode() {
+      this.logDesktopEvent('info', 'Toggling simulation mode...');
       try {
         const res = await fetch("/api/sandbox/desktop/toggle-mock", {
           method: "POST",
@@ -240,14 +352,19 @@
         const data = await res.json();
         if (data.ok) {
           this.hideAlert();
+          // Remove VNC diagnostic overlay if present
+          const overlay = document.getElementById('vnc-diag-overlay');
+          if (overlay) overlay.remove();
+          this.logDesktopEvent('success', `Simulation mode ${data.isMock ? 'ENABLED' : 'DISABLED'}`);
           this.refreshStatus();
         }
       } catch (e) {
-        console.error("Failed to toggle simulation mode:", e);
+        this.logDesktopEvent('error', `Failed to toggle simulation mode: ${e.message}`);
       }
     }
 
     async startSandbox() {
+      this.logDesktopEvent('info', 'Starting sandbox container...');
       try {
         const res = await fetch("/api/sandbox/desktop/start", {
           method: "POST",
@@ -256,18 +373,22 @@
         const data = await res.json();
         if (data.ok) {
           this.hideAlert();
+          this.logDesktopEvent('success', `Sandbox started — Container ID: ${data.status?.containerId || 'unknown'}`, `Port ${data.status?.webRtcPort || 6080}`);
           this.refreshStatus();
         } else {
+          this.logDesktopEvent('error', `Start failed: ${data.error || 'Unknown error'}`);
           this.showAlert(data.error || "Failed to start desktop sandbox");
           if (data.status) this.renderStatus(data.status);
         }
       } catch (e) {
+        this.logDesktopEvent('error', `Start exception: ${e.message}`);
         this.showAlert(`Error: ${e.message}`);
       }
     }
 
     async stopSandbox() {
       if (!confirm("Are you sure you want to stop the sandbox container?")) return;
+      this.logDesktopEvent('info', 'Stopping sandbox container...');
       try {
         const res = await fetch("/api/sandbox/desktop/stop", {
           method: "POST",
@@ -276,14 +397,20 @@
         const data = await res.json();
         if (data.ok) {
           this.hideAlert();
+          // Remove VNC diagnostic overlay if present
+          const overlay = document.getElementById('vnc-diag-overlay');
+          if (overlay) overlay.remove();
+          this.logDesktopEvent('success', 'Sandbox container stopped');
           this.refreshStatus();
         }
       } catch (e) {
+        this.logDesktopEvent('error', `Stop failed: ${e.message}`);
         this.showAlert(`Error: ${e.message}`);
       }
     }
 
     async setMode(mode) {
+      this.logDesktopEvent('info', `Switching to ${mode === 'operator_takeover' ? '🕹️ Operator Takeover' : '🤖 Autonomous'} mode`);
       try {
         const res = await fetch("/api/sandbox/desktop/mode", {
           method: "POST",
@@ -291,15 +418,19 @@
           body: JSON.stringify({ mode })
         });
         const data = await res.json();
-        if (data.ok) this.refreshStatus();
+        if (data.ok) {
+          this.logDesktopEvent('success', `Mode set → ${data.mode || mode}`);
+          this.refreshStatus();
+        }
       } catch (e) {
-        console.error("Failed to set mode:", e);
+        this.logDesktopEvent('error', `Mode switch failed: ${e.message}`);
       }
     }
 
     async promptSnapshot() {
       const name = prompt("Enter a name for this checkpoint snapshot:", `Checkpoint ${new Date().toLocaleTimeString()}`);
       if (!name) return;
+      this.logDesktopEvent('info', `Creating checkpoint snapshot: "${name}"`);
       try {
         const res = await fetch("/api/sandbox/desktop/snapshot", {
           method: "POST",
@@ -307,15 +438,22 @@
           body: JSON.stringify({ name })
         });
         const data = await res.json();
-        if (data.ok) this.refreshStatus();
-        else this.showAlert(`Snapshot failed: ${data.error}`);
+        if (data.ok) {
+          this.logDesktopEvent('success', `Snapshot created: ${data.snapshot?.id || 'ok'} — "${name}"`);
+          this.refreshStatus();
+        } else {
+          this.logDesktopEvent('error', `Snapshot failed: ${data.error}`);
+          this.showAlert(`Snapshot failed: ${data.error}`);
+        }
       } catch (e) {
+        this.logDesktopEvent('error', `Snapshot exception: ${e.message}`);
         this.showAlert(`Error: ${e.message}`);
       }
     }
 
     async revertSnapshot(snapshotId) {
       if (!confirm(`Revert sandbox container state to checkpoint [${snapshotId}]? Any uncommitted changes will be wiped.`)) return;
+      this.logDesktopEvent('warn', `Reverting to snapshot: ${snapshotId}`);
       try {
         const res = await fetch("/api/sandbox/desktop/revert", {
           method: "POST",
@@ -323,23 +461,34 @@
           body: JSON.stringify({ snapshotId })
         });
         const data = await res.json();
-        if (data.ok) this.refreshStatus();
-        else this.showAlert(`Revert failed: ${data.error}`);
+        if (data.ok) {
+          this.logDesktopEvent('success', `Reverted to snapshot ${snapshotId} — new container: ${data.status?.containerId || 'ok'}`);
+          this.refreshStatus();
+        } else {
+          this.logDesktopEvent('error', `Revert failed: ${data.error}`);
+          this.showAlert(`Revert failed: ${data.error}`);
+        }
       } catch (e) {
+        this.logDesktopEvent('error', `Revert exception: ${e.message}`);
         this.showAlert(`Error: ${e.message}`);
       }
     }
 
     async resetSandbox() {
       if (!confirm("Wipe and reset the entire visual desktop sandbox to fresh clean baseline?")) return;
+      this.logDesktopEvent('warn', 'Resetting sandbox (full wipe & restart)...');
       try {
         const res = await fetch("/api/sandbox/desktop/reset", {
           method: "POST",
           headers: this.getHeaders()
         });
         const data = await res.json();
-        if (data.ok) this.refreshStatus();
+        if (data.ok) {
+          this.logDesktopEvent('success', `Sandbox reset complete — new container: ${data.status?.containerId || 'ok'}`);
+          this.refreshStatus();
+        }
       } catch (e) {
+        this.logDesktopEvent('error', `Reset failed: ${e.message}`);
         this.showAlert(`Error: ${e.message}`);
       }
     }
@@ -349,6 +498,7 @@
       const counter = document.getElementById("burst-frame-counter");
       const shaEl = document.getElementById("burst-sha-digest");
 
+      this.logDesktopEvent('info', 'Capturing action burst (10 frames @ 10fps)...');
       if (counter) counter.innerText = "Grabbing...";
       try {
         const res = await fetch("/api/sandbox/desktop/burst", {
@@ -361,12 +511,15 @@
           this.burstFrames = data.burst.frames;
           if (counter) counter.innerText = `${data.burst.frameCount} frames (${data.burst.fps}fps)`;
           if (shaEl) shaEl.innerText = `SHA-256: ${data.burst.digestSha256.slice(0, 24)}…`;
+          this.logDesktopEvent('success', `Burst captured: ${data.burst.frameCount} frames, SHA-256: ${data.burst.digestSha256.slice(0, 16)}…`);
 
           this.startBurstPlayback(previewContainer);
         } else {
+          this.logDesktopEvent('error', 'Burst capture failed — no frames returned');
           if (counter) counter.innerText = "Failed";
         }
       } catch (e) {
+        this.logDesktopEvent('error', `Burst capture error: ${e.message}`);
         if (counter) counter.innerText = "Error";
       }
     }
@@ -440,6 +593,7 @@
         buildBtn.disabled = true;
         buildBtn.innerText = "⏳ Building...";
       }
+      this.logDesktopEvent('info', 'Building sandbox container image (Debian 12 Bookworm + Openbox + KasmVNC)...');
       this.showAlert("Building sandbox container image (Debian 12 Bookworm + Openbox + KasmVNC)... this may take 1-2 minutes.");
       try {
         const res = await fetch("/api/sandbox/desktop/build-image", {
@@ -450,12 +604,15 @@
         const data = await res.json();
         if (data.ok) {
           this.hideAlert();
+          this.logDesktopEvent('success', 'Sandbox container image built successfully');
           this.refreshStatus();
           alert("Sandbox image built successfully!");
         } else {
+          this.logDesktopEvent('error', `Build failed: ${data.error || 'Unknown error'}`);
           this.showAlert("Build failed: " + (data.error || "Unknown error"));
         }
       } catch (err) {
+        this.logDesktopEvent('error', `Build request error: ${err.message}`);
         this.showAlert("Build request error: " + err.message);
       } finally {
         if (buildBtn) {
