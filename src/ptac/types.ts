@@ -288,6 +288,21 @@ export interface SelfHealingEscalationStep extends StepBase {
     readonly kind: "selfHealingEscalation";
 }
 
+/**
+ * Visual Desktop Sandbox lifecycle step (PTAC s34 / Phase V verification).
+ *
+ * Drives the live DesktopSandboxManager end-to-end against real OCI container
+ * runtime (Debian 12 + Openbox + KasmVNC WebRTC): start → port readiness →
+ * Co-Pilot operator takeover mode preemption → autonomous resume → direct
+ * input action → 10-frame forensic action burst with SHA-256 digest →
+ * checkpoint snapshot → revert → stop.
+ */
+export interface VisualDesktopSandboxLifecycleStep extends StepBase {
+    readonly kind: "visualDesktopSandboxLifecycle";
+    /** Optional container image (default: prism-sandbox-desktop:debian-slim). */
+    readonly image?: string;
+}
+
 export type PtacStep =
     | SetupWizardStep
     | ChatStep
@@ -312,7 +327,8 @@ export type PtacStep =
     | RealDockerLifecycleStep
     | CccStateRehydrationStep
     | SrAntagonisticPromptsStep
-    | SelfHealingEscalationStep;
+    | SelfHealingEscalationStep
+    | VisualDesktopSandboxLifecycleStep;
 
 /* ── Scenario & run plumbing ───────────────────────────────────────────── */
 

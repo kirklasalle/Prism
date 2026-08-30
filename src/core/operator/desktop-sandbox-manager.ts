@@ -1027,3 +1027,16 @@ export class DesktopSandboxManager extends EventEmitter {
     });
   }
 }
+
+let defaultDesktopSandboxManagerInstance: DesktopSandboxManager | null = null;
+
+export function getDesktopSandboxManager(config?: DesktopSandboxConfig, activityBus?: ActivityBus): DesktopSandboxManager {
+  if (!defaultDesktopSandboxManagerInstance) {
+    defaultDesktopSandboxManagerInstance = new DesktopSandboxManager(
+      config || { mockProvider: process.env.PRISM_MOCK_DESKTOP === 'true' },
+      activityBus
+    );
+  }
+  return defaultDesktopSandboxManagerInstance;
+}
+

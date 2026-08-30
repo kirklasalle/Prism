@@ -272,13 +272,17 @@
     html += `
       <div style="font-size:12px;font-weight:600;margin-top:8px;margin-bottom:4px;color:#c9d1d9">Demonstration Suite Scope:</div>
       <div class="demo-scope-picker">
-        <div id="scope-btn-comp-browser" class="demo-scope-option ${selectedScope === 'comp-browser' ? 'active' : ''}" onclick="window.prismDemo.setScope('comp-browser')">
+        <div id="scope-btn-desktop" class="demo-scope-option ${selectedScope === 'desktop' ? 'active' : ''}" onclick="window.prismDemo.setScope('desktop')">
           <span class="icon">🖥️</span>
+          <span class="label-text">Visual Sandbox Desktop</span>
+        </div>
+        <div id="scope-btn-comp-browser" class="demo-scope-option ${selectedScope === 'comp-browser' ? 'active' : ''}" onclick="window.prismDemo.setScope('comp-browser')">
+          <span class="icon">💻</span>
           <span class="label-text">Computer & Browser</span>
         </div>
         <div id="scope-btn-full" class="demo-scope-option ${selectedScope === 'full' ? 'active' : ''}" onclick="window.prismDemo.setScope('full')">
           <span class="icon">🧠</span>
-          <span class="label-text">Full 43-Scenario Suite</span>
+          <span class="label-text">Full 44-Scenario Suite</span>
         </div>
       </div>
     `;
@@ -333,9 +337,11 @@
   // ── API Calls ───────────────────────────────────────────────────────────
   async function startDemo(answers) {
     try {
-      const categories = selectedScope === 'comp-browser'
-        ? ['browser-control', 'computer-control']
-        : [];
+      const categories = selectedScope === 'desktop'
+        ? ['computer-control']
+        : selectedScope === 'comp-browser'
+          ? ['browser-control', 'computer-control']
+          : [];
       await authFetch('/api/demo/start', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ answers, categories, playbackMode: selectedPlaybackMode }),
@@ -618,16 +624,16 @@
 
   function setScope(scope) {
     selectedScope = scope;
+    const desktopBtn = $('scope-btn-desktop');
     const compBrowserBtn = $('scope-btn-comp-browser');
     const fullBtn = $('scope-btn-full');
-    if (compBrowserBtn && fullBtn) {
-      if (scope === 'comp-browser') {
-        compBrowserBtn.classList.add('active');
-        fullBtn.classList.remove('active');
-      } else {
-        fullBtn.classList.add('active');
-        compBrowserBtn.classList.remove('active');
-      }
+    [desktopBtn, compBrowserBtn, fullBtn].forEach((b) => { if (b) b.classList.remove('active'); });
+    if (scope === 'desktop' && desktopBtn) {
+      desktopBtn.classList.add('active');
+    } else if (scope === 'comp-browser' && compBrowserBtn) {
+      compBrowserBtn.classList.add('active');
+    } else if (fullBtn) {
+      fullBtn.classList.add('active');
     }
     syncPopout();
   }

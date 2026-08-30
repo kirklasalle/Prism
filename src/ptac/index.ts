@@ -97,4 +97,5 @@ import "./scenarios/s30-continuous-pad-verify.js";
 import "./scenarios/s31-ccc-state-rehydration.js";
 import "./scenarios/s32-sr-antagonistic-prompts.js";
 import "./scenarios/s33-self-healing-escalation.js";
+import "./scenarios/s34-visual-desktop-sandbox.js";
 import "./scenarios/osworld.js";

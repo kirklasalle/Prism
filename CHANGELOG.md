@@ -9,6 +9,11 @@ Stabilizes the Phase V Governed Visual Desktop Sandbox (`src/core/operator/deskt
 ### Added
 
 - **Desktop Sandbox Live Activity Log Panel (`src/core/operator/public/tab-desktop.html`, `src/core/operator/public/tab-desktop.js`)**: Embedded a real-time event trail directly beneath the visual desktop canvas. Displays formatted timestamps, colored severity indicators (✅ info, ⚠️ warn, ❌ error, 🚀 success), live entry counters, and a one-click **Clear** utility.
+- **PTAC Scenario s34 — Governed Visual Desktop Sandbox & Co-Pilot (`src/ptac/scenarios/s34-visual-desktop-sandbox.ts`, `src/ptac/types.ts`, `src/ptac/orchestrator.ts`)**: Added automated end-to-end self-drive scenario `s34` to the PTAC test and demo runner (`npm run ptac:demo`, `--suite=fast`, `--suite=full`). Exercises boot PAD integrity, OCI container start, 60fps WebRTC stream connectivity, Co-Pilot operator takeover preemption, autonomous resume, direct desktop input, forensic 10-frame action burst capture with SHA-256 validation, and checkpoint snapshot/rewind lifecycle.
+- **Interactive Dashboard Demo Mode Showcase (`src/core/runtime/demonstration-engine.ts`, `src/core/operator/public/demo-mode.js`)**:
+  - Added dedicated **🖥️ Visual Sandbox Desktop** scope option to the Demo Mode overlay for interactive 1-click guided walkthroughs.
+  - Added `desktop-sandbox-demo` demonstration scenario to `DemonstrationEngine` exercising live container status inspection, Co-Pilot human takeover preemption, high-speed framebuffer burst capture, and immutable snapshot recording.
+  - Integrated `desktop` tab into the visual `TAB_TOUR` sequence.
 - **Universal Dashboard Logging Integration (`src/core/operator/public/dashboard-core.js`, `src/core/operator/public/tab-logs.html`, `src/core/operator/public/tab-desktop.js`)**:
   - Exported `window.dashboardLog` globally so all frontend modules can emit structured log events to the central operator console.
   - Added `desktop` and `sandbox` filter options to the Source selector in the **Logs & Debug** tab.

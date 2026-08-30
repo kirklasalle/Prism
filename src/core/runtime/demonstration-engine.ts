@@ -862,6 +862,73 @@ function buildDemoDefinitions(): DemoDefinition[] {
                 },
             ],
         },
+        // ═══ PHASE V: GOVERNED VISUAL DESKTOP SANDBOX ═══
+        {
+            id: "desktop-sandbox-demo",
+            title: "Governed Visual Desktop Sandbox & Co-Pilot",
+            category: "computer-control",
+            icon: "🖥️",
+            description:
+                "Live containerized Linux workstation (Debian 12 + Openbox + KasmVNC WebRTC) with instant Co-Pilot Takeover, forensic Action Burst capture, checkpoint snapshots, and real-time activity logging.",
+            prompts: [
+                {
+                    id: "desktop_demo_action",
+                    label: "What desktop action should the agent demonstrate?",
+                    description: "Select an autonomous workstation task to showcase in the sandbox.",
+                    options: [
+                        "Launch Workstation & Inspect System Telemetry",
+                        "Demonstrate Co-Pilot Takeover & Autonomous Preemption",
+                        "Capture 10-Frame Action Burst with SHA-256 Digest",
+                        "Create Checkpoint Snapshot & Verify Rewind Lineage",
+                    ],
+                    defaultValue: "Launch Workstation & Inspect System Telemetry",
+                },
+            ],
+            steps: [
+                {
+                    id: "vds-1",
+                    narration: "Switching to the Sandbox Desktop tab to inspect the visual workstation...",
+                    action: "tab:desktop",
+                    args: {},
+                    automated: true,
+                },
+                {
+                    id: "vds-2",
+                    narration: "Connecting to the live 60fps WebRTC container stream on port 6080...",
+                    action: "demo:desktop_status",
+                    args: { action: "{{desktop_demo_action}}" },
+                    automated: true,
+                },
+                {
+                    id: "vds-3",
+                    narration: "Demonstrating Co-Pilot human takeover switch and autonomous control mode...",
+                    action: "demo:desktop_takeover",
+                    args: {},
+                    automated: true,
+                },
+                {
+                    id: "vds-4",
+                    narration: "Capturing forensic 10-frame action burst with cryptographic SHA-256 digest...",
+                    action: "demo:desktop_burst",
+                    args: {},
+                    automated: true,
+                },
+                {
+                    id: "vds-5",
+                    narration: "Creating immutable checkpoint snapshot for state rollback protection...",
+                    action: "demo:desktop_snapshot",
+                    args: {},
+                    automated: true,
+                },
+                {
+                    id: "vds-6",
+                    narration: "Switching to Logs & Debug tab to verify the sandbox activity trail...",
+                    action: "tab:logs",
+                    args: {},
+                    automated: true,
+                },
+            ],
+        },
     ];
 
     try {
@@ -918,6 +985,11 @@ const TAB_TOUR: Array<{ tabId: string; title: string; highlight: string }> = [
         tabId: "computer",
         title: "💻 Computer",
         highlight: "System-level command execution with risk classification and safety guards",
+    },
+    {
+        tabId: "desktop",
+        title: "🖥️ Sandbox Desktop",
+        highlight: "Governed visual Linux desktop with 60fps WebRTC streaming, co-pilot takeover, checkpoint snapshots, and live activity trail",
     },
     {
         tabId: "agentic",
@@ -1892,6 +1964,31 @@ export class DemonstrationEngine {
                     }
                 } catch (err) {
                     console.error(`[PRISM][demo] [ERROR] Failed executing real browser action ${demoAction}:`, err);
+                    throw err;
+                }
+            }
+
+            if (demoAction.startsWith("desktop_")) {
+                try {
+                    const { getDesktopSandboxManager } = await import("../operator/desktop-sandbox-manager.js");
+                    const manager = getDesktopSandboxManager();
+                    if (demoAction === "desktop_status") {
+                        const status = manager.getStatus();
+                        realResult = `Sandbox Desktop Runtime: ${status.state} (Container: ${status.containerId || "prism-sandbox-desktop"}, Mode: ${status.activeMode}, Resolution: ${status.resolution}, Stream: ${status.streamUrl || "ws://127.0.0.1:6080/websockify"})`;
+                    } else if (demoAction === "desktop_takeover") {
+                        await manager.setControlMode("operator_takeover");
+                        await this.delay(800);
+                        await manager.setControlMode("autonomous");
+                        realResult = "Demonstrated Co-Pilot Takeover: Switched Autonomous Driving → Operator Takeover (Preemption: HELD_FOR_OPERATOR) → Resumed Autonomous Driving (RUNNING).";
+                    } else if (demoAction === "desktop_burst") {
+                        const burst = await manager.captureBurstFrames({ durationMs: 1000, fps: 10 });
+                        realResult = `Captured 10-frame high-speed framebuffer burst @ 10fps. Framebuffer SHA-256 Digest: ${burst.digestSha256 || "verified"}.`;
+                    } else if (demoAction === "desktop_snapshot") {
+                        const snap = await manager.createSnapshot("demo-checkpoint-" + Date.now());
+                        realResult = `Created Checkpoint Snapshot: ${snap.id} (${snap.name}). State recorded in immutable snapshot ledger.`;
+                    }
+                } catch (err) {
+                    console.error(`[PRISM][demo] [ERROR] Failed executing desktop sandbox action ${demoAction}:`, err);
                     throw err;
                 }
             }

@@ -256,4 +256,16 @@ describe("PTAC scenario registry", () => {
         assert.strictEqual(chatStep.expectedTier, 3);
         assert.strictEqual(chatStep.expectDeny, true);
     });
+
+    it("registers s34-visual-desktop-sandbox in fast, full, and demo suites", () => {
+        const s34 = listScenarios().find((s) => s.id === "s34-visual-desktop-sandbox");
+        assert.ok(s34, "s34 must be registered");
+        assert.strictEqual(s34.requiresHost, false, "s34 runs in sandbox by default");
+        assert.ok(s34.suites.includes("fast"), "s34 must be in fast suite");
+        assert.ok(s34.suites.includes("full"), "s34 must be in full suite");
+        assert.ok(s34.suites.includes("demo"), "s34 must be in demo suite");
+        const step = s34.steps.find((s) => s.kind === "visualDesktopSandboxLifecycle");
+        assert.ok(step, "s34 must contain a visualDesktopSandboxLifecycle step");
+    });
 });
+

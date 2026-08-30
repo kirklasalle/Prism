@@ -1305,6 +1305,56 @@ ${domains.map((d) => `| ${d.name} | ${d.tasks} | ${d.passed} | ${((d.passed / d.
                 console.log(`[ptac:osworld] Publication report written to docs/benchmarks/osworld-v1.md`);
                 return;
             }
+            case "visualDesktopSandboxLifecycle": {
+                // s34 — Governed Visual Desktop Sandbox & Co-Pilot verification.
+                // Runs against real OCI container runtime (Debian 12 + Openbox + KasmVNC WebRTC)
+                const { getDesktopSandboxManager } = await import("../core/operator/desktop-sandbox-manager.js");
+                const manager = getDesktopSandboxManager();
+                try {
+                    // 1. Start sandbox in runtime mode (default OCI container)
+                    const status = await manager.startSandbox();
+                    if (!status.state || (status.state !== "RUNNING" && status.state !== "STARTING")) {
+                        throw new Error(`visualDesktopSandboxLifecycle: expected RUNNING state, got ${status.state}`);
+                    }
+                    if (!status.streamUrl || !status.streamUrl.includes("6080")) {
+                        throw new Error(`visualDesktopSandboxLifecycle: invalid streamUrl: ${status.streamUrl}`);
+                    }
+
+                    // 2. Test Co-Pilot Operator Takeover mode
+                    const takeover = await manager.setControlMode("operator_takeover");
+                    if (takeover.activeMode !== "operator_takeover" || takeover.state !== "HELD_FOR_OPERATOR") {
+                        throw new Error(`visualDesktopSandboxLifecycle: takeover failed, state=${takeover.state}`);
+                    }
+
+                    // 3. Resume autonomous control
+                    const resumed = await manager.setControlMode("autonomous");
+                    if (resumed.activeMode !== "autonomous" || resumed.state !== "RUNNING") {
+                        throw new Error(`visualDesktopSandboxLifecycle: resume failed, state=${resumed.state}`);
+                    }
+
+                    // 4. Execute direct desktop input action
+                    await manager.executeInputAction({ type: "move", x: 200, y: 200 });
+
+                    // 5. Capture forensic 10-frame Action Burst with SHA-256 digest
+                    const burst = await manager.captureBurstFrames({ durationMs: 1000, fps: 10 });
+                    if (!burst.frames || burst.frames.length === 0 || !burst.digestSha256) {
+                        throw new Error(`visualDesktopSandboxLifecycle: action burst capture failed, frames=${burst.frames?.length}`);
+                    }
+
+                    // 6. Create Checkpoint Snapshot
+                    const snap = await manager.createSnapshot("ptac-s34-checkpoint");
+                    if (!snap.id) {
+                        throw new Error("visualDesktopSandboxLifecycle: snapshot creation returned no ID");
+                    }
+
+                    // 7. Revert Snapshot
+                    await manager.revertSnapshot(snap.id);
+                } finally {
+                    // 8. Clean up sandbox
+                    await manager.stopSandbox().catch(() => {});
+                }
+                return;
+            }
             default: {
                 const _exhaustive: never = step;
                 throw new Error(`unknown ptac step: ${JSON.stringify(_exhaustive)}`);
