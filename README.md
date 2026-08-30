@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://img.shields.io/badge/version-0.24.0-06b6d4?style=for-the-badge&labelColor=0a0a0f" alt="Version" />
+  <img src="https://img.shields.io/badge/version-0.24.1-06b6d4?style=for-the-badge&labelColor=0a0a0f" alt="Version" />
   <img src="https://img.shields.io/badge/license-Apache_2.0-6366f1?style=for-the-badge&labelColor=0a0a0f" alt="License" />
   <img src="https://img.shields.io/badge/node-%3E%3D22-22c55e?style=for-the-badge&labelColor=0a0a0f" alt="Node.js" />
   <img src="https://img.shields.io/badge/tests-226_discovered_suites_passing-22c55e?style=for-the-badge&labelColor=0a0a0f" alt="Tests" />
@@ -43,7 +43,7 @@ PRISM eliminates that trade-off entirely through **governance-native architectur
 | **Governance**      | Prompt-level guardrails, easily bypassed | Cryptographically enforced 10 Laws (SHA-256 integrity, CI-gated)                      |
 | **Policy Engine**   | Basic allow/deny lists                   | 3-tier authority model with approval queues, timeouts, and denial paths               |
 | **Multi-Model**     | Single model per request                 | Spectrum Refraction: tri-model parallel fan-out with structured aggregation           |
-| **Computer Use**    | Browser-only or terminal-only            | Full-stack: browser + terminal + container sandbox, all policy-governed               |
+| **Computer Use**    | Browser-only or terminal-only            | Full-stack: browser + terminal + visual sandbox desktop, all policy-governed          |
 | **Agent Lifecycle** | Stateless tool calls                     | Managed lifecycles (ephemeral → semi-permanent → permanent) with swarm coordination   |
 | **Identity**        | API key auth                             | IAM with RBAC, SSO (OIDC/SAML), SCIM provisioning, character accountability chains    |
 | **Observability**   | Basic logging                            | SHA-256 hashed activity events, LLRE cognitive economics, retrieval quality telemetry |
@@ -60,7 +60,7 @@ PRISM eliminates that trade-off entirely through **governance-native architectur
 ```
 ┌──────────────────────────────────────────────────────────────┐
 │                    OPERATOR DASHBOARD                        │
-│  Chat │ Agents │ Browser │ Computer │ Network │ Telemetry    │
+│  Chat │ Agents │ Browser │ Computer │ Desktop │ Telemetry    │
 └──────────────────────────┬───────────────────────────────────┘
                            │
 ┌──────────────────────────▼───────────────────────────────────┐
@@ -94,7 +94,7 @@ PRISM eliminates that trade-off entirely through **governance-native architectur
 │  System │ Protocol │ Application │ Network │ Cognition       │
 │  Shell    HTTP       Browser       50+ cmds   SR Tool        │
 │  FS       A2A        Terminal PTY  ipconfig    Autonomous     │
-│  Docker              Container     ping        Planner        │
+│  Docker              Desktop VDS   ping        Planner        │
 │  Images              Email/OAuth   tracert                    │
 │  Audio               Calendar      netstat                    │
 │  Video               Tasks/Notes   nslookup                   │
@@ -170,7 +170,22 @@ PRISM treats computer use as a **first-class governed capability**, not an auxil
 - **Autonomous Research** — Browser Researcher skill that autonomously navigates, searches, extracts, and synthesizes information from the web
 - All pathways governed by the 3-tier policy engine with approval gates for high-risk operations
 
-### 5. Multi-Agent Swarm Orchestration
+### 5. Governed Visual Desktop Sandbox (Phase V)
+
+<p align="center">
+  <img src="docs/media/illustrations/prism_sandbox_desktop_live.png" alt="PRISM Governed Visual Desktop Sandbox with Live Streaming, Co-Pilot Takeover, and Real-Time Activity Log" width="100%" style="border-radius: 10px; box-shadow: 0 8px 24px rgba(0,0,0,0.35);" />
+</p>
+
+PRISM provides a **lightweight, containerized Linux graphical workstation** (Debian 12 Bookworm + Openbox + KasmVNC WebRTC) integrated directly into the operator console for fully autonomous desktop application execution, multi-window research, and visual verification:
+
+- **60fps Sub-30ms WebRTC Stream**: Real-time visual observation of the agent's screen, cursor movements, and desktop application windows with zero host compromise.
+- **Instant Co-Pilot / Human Takeover**: Operators can seamlessly click into the viewport to take manual mouse/keyboard control at any second (e.g., solving CAPTCHAs, entering 2FA), then return control to the autonomous driving loop.
+- **Checkpoint Snapshots & Instant Rewind**: Create point-in-time container state snapshots and rewind the sandbox environment to a previous checkpoint with one click.
+- **Live Activity Log & Universal Audit Trail**: Timestamped event feed directly underneath the viewport tracing all container state transitions, modes, and tool invocations, mirrored to the central **Logs & Debug** tab and cryptographic activity ledger.
+- **High-Speed Framebuffer Burst Capture**: Forensic 10fps frame bursts with SHA-256 digest hashing for cryptographic audit verification.
+- **Multi-Engine OCI Support**: Out-of-the-box execution across Docker, native Podman, and WSL2 Podman (`--network=host` + backend HTTP readiness probing).
+
+### 6. Multi-Agent Swarm Orchestration
 
 - **Agent lifecycles**: ephemeral (per-task), semi-permanent (idle-reaped), permanent (manual stop)
 - **Per-agent model assignment**: dynamic provider/model override per agent, hot-swappable at runtime
@@ -180,19 +195,19 @@ PRISM treats computer use as a **first-class governed capability**, not an auxil
 - **CAC Main Agent**: each operator's certificate-bound primary assistant, agent, and interaction identity; one CAC Main Agent per operator per Initialization Certificate, reused across sessions
 - **Guardian Agent**: permanent secondary system agent powered by local `llama.cpp` inference; supports the CAC Main Agent and monitors, protects, and heals the complete dashboard and all platform services
 
-### 6. Advanced Model Routing
+### 7. Advanced Model Routing
 
 - **Fully Configurable & AI-Assisted**: Complete operator control over routing topologies with AI assistance to dynamically determine the optimal model assignments based on task parameters.
 - **Role-Based Overrides**: Map specific models or providers to individual task roles (e.g., chat, code-generation, summarization, memory indexing, or research) with automatic validation.
 - **Power-Aware Strategies**: Supports routing strategies based on target profiles: `eco` (prioritizes local models to eliminate API charges), `performance` (highest available capability tier), and `adaptive` (balances VRAM and API costs dynamically).
 
-### 7. Advanced Model Matrix (Exclusive Platform Core)
+### 8. Advanced Model Matrix (Exclusive Platform Core)
 
 - **Operator-Exclusive Registry**: A dynamically updated, proprietary database of providers, models, use cases, capabilities, and attributes.
 - **Local Model Auto-Discovery**: Automatically queries local runtime environments (e.g., Ollama `/api/ps`) to register and measure local capability parameters (VRAM, speed, parameter size).
 - **Deprecation & Sunset Lifecycle Tracking**: Preserves deprecation dates, sunset deadlines, replacement successor patterns, and legacy telemetry configurations to prevent silent failures and preserve historical regression check capabilities.
 
-### 8. Identity, Access & Accountability
+### 9. Identity, Access & Accountability
 
 - **IAM Store** with RBAC, multi-tenant support, and user lifecycle management
 - **SSO**: OIDC and SAML integration for enterprise identity providers
@@ -200,7 +215,7 @@ PRISM treats computer use as a **first-class governed capability**, not an auxil
 - **Character Accountability Control (CAC)**: the operator's Main Agent and durable assistant identity; every action is linked to its character, Prism user, operator, and immutable accountability chain. See [CAC Main Agent and Guardian Architecture](docs/CAC_GUARDIAN_AGENT_ARCHITECTURE.md).
 - **Session management** with cryptographic session tokens and cookie-based auth
 
-### 9. Skills Engine — Autonomous Agent Capabilities
+### 10. Skills Engine — Autonomous Agent Capabilities
 
 Production-ready skills that agents use to interact with the world:
 
@@ -217,7 +232,7 @@ Production-ready skills that agents use to interact with the world:
 | **Project Store**           | Structured project data management with SQLite                             |
 | **Semantic Query**          | Memory retrieval across episodic, session, and semantic stores             |
 
-### 10. Plugin Architecture — MCP + Marketplace
+### 11. Plugin Architecture — MCP + Marketplace
 
 - **Model Context Protocol (MCP)** plugin system with hot-loading
 - **Ed25519 code signing** for plugin integrity verification
@@ -225,7 +240,7 @@ Production-ready skills that agents use to interact with the world:
 - **Marketplace curation policy** with OSI license requirements
 - **Plugin toggle** — enable/disable plugins at runtime without restart
 
-### 11. Autonomic Update Engine & Guardian Integration
+### 12. Autonomic Update Engine & Guardian Integration
 
 PRISM features a secure, operator-controlled, and autonomously monitored update orchestration framework integrated directly into the operator dashboard and the Guardian Agent's background cycle:
 
@@ -238,7 +253,7 @@ PRISM features a secure, operator-controlled, and autonomously monitored update 
   - Automatically verifies download signature integrity and compile validity post-update.
   - Auto-rolls back to the stashed backup if any compilation or startup test fails, protecting the instance from code corruption or dependency breakage.
 
-### 12. Add-on Architecture — Deep System Integrations
+### 13. Add-on Architecture — Deep System Integrations
 
 PRISM introduces a new **Add-on Layer** sitting between the core system and the sandboxed Plugin SDK:
 
